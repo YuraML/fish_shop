@@ -1,0 +1,87 @@
+import requests
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+def get_access_token(client_id, client_secret):
+    url = 'https://useast.api.elasticpath.com/oauth/access_token'
+    client_data = {
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'grant_type': 'client_credentials'
+    }
+
+    response = requests.post(url, data=client_data)
+    response.raise_for_status()
+
+    response_context = response.json()
+    access_token = response_context['access_token']
+
+    return access_token
+
+
+def get_products(access_token):
+    url = 'https://useast.api.elasticpath.com/pcm/products'
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+
+    return response.json()
+
+
+def get_product(access_token, product_id):
+    url = f'https://useast.api.elasticpath.com/pcm/products/{product_id}'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+
+    return response.json()
+
+
+def get_cart(access_token, cart_id):
+    url = f'https://useast.api.elasticpath.com/v2/carts/{cart_id}'
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_cart_products(access_token, cart_id):
+    url = f'https://useast.api.elasticpath.com/v2/carts/{cart_id}/items'
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+
+def add_product_to_cart(access_token, cart_id, product_id, quantity):
+    url = f'https://useast.api.elasticpath.com/v2/carts/{cart_id}/items'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+    }
+    product_data = {
+        "data": {
+            "id": product_id,
+            "type": "cart_item",
+            "quantity": quantity
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=product_data)
+    response.raise_for_status()
+
+    return response.json()
