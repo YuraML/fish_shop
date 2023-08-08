@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Filters, Updater
 from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler, CallbackContext
 
-from services import get_access_token, get_products, get_product
+from services import get_access_token, get_products, get_product, get_product_image_url
 
 _database = None
 
@@ -32,9 +32,12 @@ def handle_menu(update: Update, context: CallbackContext, access_token):
     product_name = product['attributes']['name']
     product_description = product['attributes']['description']
     text = f"{product_name}\n\n{product_description}"
-    context.bot.edit_message_text(text=text.format(query.data),
-                                  chat_id=query.message.chat_id,
-                                  message_id=query.message.message_id)
+
+    image_id = product['relationships']['main_image']['data']['id']
+    image_url = get_product_image_url(access_token, image_id)
+    context.bot.send_photo(chat_id=query.message.chat_id, photo=image_url, caption=text)
+
+    context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
     return 'START'
 
 

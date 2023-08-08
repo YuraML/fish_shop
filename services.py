@@ -85,3 +85,15 @@ def add_product_to_cart(access_token, cart_id, product_id, quantity):
     response.raise_for_status()
 
     return response.json()
+
+
+def get_product_image_url(access_token, image_id):
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+
+    url = f'https://useast.api.elasticpath.com/v2/files/{image_id}'
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()['data']['link']['href']
