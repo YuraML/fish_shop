@@ -1,3 +1,4 @@
+import logging
 import os
 import redis
 
@@ -10,8 +11,15 @@ from services import get_access_token, get_products, get_product, get_product_im
 
 _database = None
 
+logging.basicConfig(
+    format='%(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
-def start(update: Update, context: CallbackContext, access_token):
+logger = logging.getLogger(__name__)
+
+
+def fetch_products(access_token):
     products = get_products(access_token)['data']
     keyboard = [[]]
     for product in products:
@@ -20,7 +28,11 @@ def start(update: Update, context: CallbackContext, access_token):
         fish_button = InlineKeyboardButton(fish_name, callback_data=fish_id)
         keyboard[0].append(fish_button)
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    return InlineKeyboardMarkup(keyboard)
+
+
+def start(update: Update, context: CallbackContext, access_token):
+    reply_markup = fetch_products(access_token)
     update.message.reply_text('Choose an available fish:', reply_markup=reply_markup)
     return 'HANDLE_MENU'
 
@@ -31,14 +43,27 @@ def handle_menu(update: Update, context: CallbackContext, access_token):
     product = get_product(access_token, product_id)['data']
     product_name = product['attributes']['name']
     product_description = product['attributes']['description']
+
     text = f"{product_name}\n\n{product_description}"
+    keyboard = [[InlineKeyboardButton('Back', callback_data='back')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     image_id = product['relationships']['main_image']['data']['id']
     image_url = get_product_image_url(access_token, image_id)
-    context.bot.send_photo(chat_id=query.message.chat_id, photo=image_url, caption=text)
+    context.bot.send_photo(chat_id=query.message.chat_id, photo=image_url, caption=text, reply_markup=reply_markup)
 
     context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
-    return 'START'
+    return 'HANDLE_DESCRIPTION'
+
+
+def handle_description(update: Update, context: CallbackContext, access_token):
+    if update.callback_query.data == 'back':
+        reply_markup = fetch_products(access_token)
+        query = update.callback_query
+        context.bot.send_message(chat_id=query.message.chat_id, text='Choose an available fish:',
+                                 reply_markup=reply_markup)
+
+        return 'HANDLE_MENU'
 
 
 def handle_users_reply(update: Update, context: CallbackContext):
@@ -62,14 +87,15 @@ def handle_users_reply(update: Update, context: CallbackContext):
 
     states_functions = {
         'START': start,
-        'HANDLE_MENU': handle_menu
+        'HANDLE_MENU': handle_menu,
+        'HANDLE_DESCRIPTION': handle_description
     }
     state_handler = states_functions[user_state]
     try:
         next_state = state_handler(update, context, access_token)
         db.set(chat_id, next_state)
     except Exception as err:
-        print(err)
+        logger.error(f"Error while processing update: {err}", exc_info=True)
 
 
 def get_database_connection():
