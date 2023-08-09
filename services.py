@@ -46,8 +46,8 @@ def get_product(access_token, product_id):
     return response.json()
 
 
-def get_cart(access_token, cart_id):
-    url = f'https://useast.api.elasticpath.com/v2/carts/{cart_id}'
+def get_cart(access_token, chat_id):
+    url = f'https://useast.api.elasticpath.com/v2/carts/{chat_id}'
     headers = {
         'Authorization': f'Bearer {access_token}'
     }
@@ -57,8 +57,8 @@ def get_cart(access_token, cart_id):
     return response.json()
 
 
-def get_cart_products(access_token, cart_id):
-    url = f'https://useast.api.elasticpath.com/v2/carts/{cart_id}/items'
+def get_cart_products(access_token, chat_id):
+    url = f'https://useast.api.elasticpath.com/v2/carts/{chat_id}/items'
     headers = {
         'Authorization': f'Bearer {access_token}'
     }
@@ -68,8 +68,8 @@ def get_cart_products(access_token, cart_id):
     return response.json()
 
 
-def add_product_to_cart(access_token, cart_id, product_id, quantity):
-    url = f'https://useast.api.elasticpath.com/v2/carts/{cart_id}/items'
+def add_product_to_cart(access_token, chat_id, product_id, quantity):
+    url = f'https://useast.api.elasticpath.com/v2/carts/{chat_id}/items'
     headers = {
         'Authorization': f'Bearer {access_token}',
     }
@@ -84,6 +84,17 @@ def add_product_to_cart(access_token, cart_id, product_id, quantity):
     response = requests.post(url, headers=headers, json=product_data)
     response.raise_for_status()
 
+    return response.json()
+
+
+def remove_product_from_cart(access_token, chat_id, cart_item_id):
+    url = f'https://useast.api.elasticpath.com/v2/carts/{chat_id}/items/{cart_item_id}'
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+
+    response = requests.delete(url, headers=headers)
+    response.raise_for_status()
     return response.json()
 
 

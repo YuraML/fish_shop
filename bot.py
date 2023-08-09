@@ -4,10 +4,10 @@ import redis
 
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Filters, Updater
-from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler, CallbackContext
+from telegram.ext import Filters, Updater, CallbackQueryHandler, CommandHandler, MessageHandler, CallbackContext
 
-from services import get_access_token, get_products, get_product, get_product_image_url
+from services import get_access_token, get_products, get_product, get_product_image_url, add_product_to_cart, \
+    get_cart_products, get_cart, remove_product_from_cart
 
 _database = None
 
@@ -27,8 +27,47 @@ def fetch_products(access_token):
         fish_id = product['id']
         fish_button = InlineKeyboardButton(fish_name, callback_data=fish_id)
         keyboard[0].append(fish_button)
+    cart_button = InlineKeyboardButton('Cart', callback_data='cart')
+    keyboard.append([cart_button])
 
     return InlineKeyboardMarkup(keyboard)
+
+
+def show_cart(update: Update, context: CallbackContext, access_token, chat_id):
+    products = get_cart_products(access_token, chat_id)
+    products_buttons = []
+    text_message = "Your cart:\n"
+
+    for product in products['data']:
+        product_name = product['name']
+        product_ordered_amount = product['quantity']
+        product_description = product['description']
+        product_price = product['meta']['display_price']['with_tax']['unit']['formatted']
+
+        cart_item_id = product['id']
+        cart_item_cost = product['meta']['display_price']['with_tax']['value']['formatted']
+
+        text_message += f"""
+        \n{product_name}
+        \n{product_price} for kg
+        \n{product_description}
+        \n{product_ordered_amount} kg in cart for {cart_item_cost}
+        """
+
+        products_buttons.append(InlineKeyboardButton(
+            f'Remove {product_name} from the cart',
+            callback_data=cart_item_id)
+        )
+
+    back_to_menu_button = [InlineKeyboardButton('Back to Menu', callback_data='back_to_menu')]
+    keyboard = [products_buttons, back_to_menu_button]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    cart = get_cart(access_token, chat_id)
+    cart_total_cost = cart['data']['meta']['display_price']['with_tax']['formatted']
+    text_message += f'\nTotal: {cart_total_cost}'
+
+    return text_message, reply_markup
 
 
 def start(update: Update, context: CallbackContext, access_token):
@@ -40,12 +79,26 @@ def start(update: Update, context: CallbackContext, access_token):
 def handle_menu(update: Update, context: CallbackContext, access_token):
     query = update.callback_query
     product_id = query.data
+    if product_id == 'cart':
+        chat_id = query.from_user.id
+        cart_text, reply_markup = show_cart(update, context, access_token, chat_id)
+        context.bot.send_message(chat_id=query.message.chat_id, text=cart_text, reply_markup=reply_markup)
+
+        context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+        return 'HANDLE_CART'
+
     product = get_product(access_token, product_id)['data']
     product_name = product['attributes']['name']
     product_description = product['attributes']['description']
-
     text = f"{product_name}\n\n{product_description}"
-    keyboard = [[InlineKeyboardButton('Back', callback_data='back')]]
+
+    keyboard = [
+        [InlineKeyboardButton('1 kg', callback_data=f'{product_id}_1'),
+         InlineKeyboardButton('5 kg', callback_data=f'{product_id}_5'),
+         InlineKeyboardButton('10 kg', callback_data=f'{product_id}_10')],
+        [InlineKeyboardButton('Cart', callback_data='cart')],
+        [InlineKeyboardButton('Back', callback_data='back')]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     image_id = product['relationships']['main_image']['data']['id']
@@ -57,13 +110,56 @@ def handle_menu(update: Update, context: CallbackContext, access_token):
 
 
 def handle_description(update: Update, context: CallbackContext, access_token):
-    if update.callback_query.data == 'back':
+    query = update.callback_query
+    if query.data == 'back':
         reply_markup = fetch_products(access_token)
-        query = update.callback_query
         context.bot.send_message(chat_id=query.message.chat_id, text='Choose an available fish:',
                                  reply_markup=reply_markup)
-
+        context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
         return 'HANDLE_MENU'
+
+    elif query.data == 'cart':
+        chat_id = query.from_user.id
+        text_message, reply_markup = show_cart(update, context, access_token, chat_id)
+        context.bot.send_message(chat_id=query.message.chat_id, text=text_message, reply_markup=reply_markup)
+        context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+        return 'HANDLE_CART'
+
+    product_id, quantity = query.data.split('_')
+    product = get_product(access_token, product_id)
+    product_name = product['data']['attributes']['name']
+    chat_id = query.from_user.id
+    add_product_to_cart(access_token, chat_id, product_id, int(quantity))
+
+    keyboard = [
+        [InlineKeyboardButton('Back to Menu', callback_data='back'),
+         InlineKeyboardButton('Cart', callback_data='cart')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    context.bot.send_message(chat_id=query.message.chat_id,
+                             text=f'Added {quantity} kg of {product_name} to your cart!',
+                             reply_markup=reply_markup)
+
+    context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+    return 'HANDLE_DESCRIPTION'
+
+
+def handle_cart(update: Update, context: CallbackContext, access_token):
+    query = update.callback_query
+    chat_id = query.message.chat.id
+    cart_item_id = query.data
+
+    if cart_item_id == 'back_to_menu':
+        reply_markup = fetch_products(access_token)
+        context.bot.send_message(chat_id=chat_id, text='Choose an available fish:', reply_markup=reply_markup)
+        context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+        return 'HANDLE_MENU'
+
+    remove_product_from_cart(access_token, chat_id, cart_item_id)
+    text_message, reply_markup = show_cart(update, context, access_token, chat_id)
+    query.message.edit_text(text_message, reply_markup=reply_markup)
+
+    return 'HANDLE_CART'
 
 
 def handle_users_reply(update: Update, context: CallbackContext):
@@ -88,7 +184,8 @@ def handle_users_reply(update: Update, context: CallbackContext):
     states_functions = {
         'START': start,
         'HANDLE_MENU': handle_menu,
-        'HANDLE_DESCRIPTION': handle_description
+        'HANDLE_DESCRIPTION': handle_description,
+        'HANDLE_CART': handle_cart
     }
     state_handler = states_functions[user_state]
     try:
