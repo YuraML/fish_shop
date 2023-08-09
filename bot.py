@@ -7,7 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Filters, Updater, CallbackQueryHandler, CommandHandler, MessageHandler, CallbackContext
 
 from services import get_access_token, get_products, get_product, get_product_image_url, add_product_to_cart, \
-    get_cart_products, get_cart, remove_product_from_cart
+    get_cart_products, get_cart, remove_product_from_cart, add_client_email
 
 _database = None
 
@@ -177,6 +177,7 @@ def handle_cart(update: Update, context: CallbackContext, access_token):
 def handle_email(update: Update, context: CallbackContext, access_token):
     chat_id = update.message.chat_id
     email = update.message.text
+    add_client_email(access_token, chat_id, email)
     context.bot.send_message(chat_id=chat_id, text=f'You provided the email address: {email}. Thank you!')
 
     reply_markup = fetch_products(access_token)

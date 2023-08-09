@@ -99,12 +99,31 @@ def remove_product_from_cart(access_token, chat_id, cart_item_id):
 
 
 def get_product_image_url(access_token, image_id):
+    url = f'https://useast.api.elasticpath.com/v2/files/{image_id}'
     headers = {
         'Authorization': f'Bearer {access_token}'
     }
 
-    url = f'https://useast.api.elasticpath.com/v2/files/{image_id}'
-
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     return response.json()['data']['link']['href']
+
+
+def add_client_email(access_token, chat_id, email):
+    url = 'https://useast.api.elasticpath.com/v2/customers'
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+
+    customer_data = {
+        'data': {
+            'email': email,
+            'type': 'customer',
+            'name': str(chat_id)
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=customer_data)
+    response.raise_for_status()
+    return response.json()
