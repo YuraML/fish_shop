@@ -36,7 +36,7 @@ def fetch_products(access_token):
 def show_cart(update: Update, context: CallbackContext, access_token, chat_id):
     products = get_cart_products(access_token, chat_id)
     products_buttons = []
-    text_message = "Your cart:\n"
+    text_message = 'Your cart:\n'
 
     for product in products['data']:
         product_name = product['name']
@@ -54,13 +54,15 @@ def show_cart(update: Update, context: CallbackContext, access_token, chat_id):
         \n{product_ordered_amount} kg in cart for {cart_item_cost}
         """
 
-        products_buttons.append(InlineKeyboardButton(
-            f'Remove {product_name} from the cart',
-            callback_data=cart_item_id)
+        products_buttons.append(
+            InlineKeyboardButton(
+                f"Remove {product_name} from the cart", callback_data=cart_item_id
+            )
         )
 
     back_to_menu_button = [InlineKeyboardButton('Back to Menu', callback_data='back_to_menu')]
-    keyboard = [products_buttons, back_to_menu_button]
+    pay_button = [InlineKeyboardButton('Pay', callback_data='pay')]
+    keyboard = [products_buttons, pay_button, back_to_menu_button]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     cart = get_cart(access_token, chat_id)
@@ -90,7 +92,7 @@ def handle_menu(update: Update, context: CallbackContext, access_token):
     product = get_product(access_token, product_id)['data']
     product_name = product['attributes']['name']
     product_description = product['attributes']['description']
-    text = f"{product_name}\n\n{product_description}"
+    text = f'{product_name}\n\n{product_description}'
 
     keyboard = [
         [InlineKeyboardButton('1 kg', callback_data=f'{product_id}_1'),
@@ -113,8 +115,11 @@ def handle_description(update: Update, context: CallbackContext, access_token):
     query = update.callback_query
     if query.data == 'back':
         reply_markup = fetch_products(access_token)
-        context.bot.send_message(chat_id=query.message.chat_id, text='Choose an available fish:',
-                                 reply_markup=reply_markup)
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="Choose an available fish:",
+            reply_markup=reply_markup,
+        )
         context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
         return 'HANDLE_MENU'
 
@@ -136,9 +141,11 @@ def handle_description(update: Update, context: CallbackContext, access_token):
          InlineKeyboardButton('Cart', callback_data='cart')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    context.bot.send_message(chat_id=query.message.chat_id,
-                             text=f'Added {quantity} kg of {product_name} to your cart!',
-                             reply_markup=reply_markup)
+    context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=f"Added {quantity} kg of {product_name} to your cart!",
+        reply_markup=reply_markup,
+    )
 
     context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
     return 'HANDLE_DESCRIPTION'
@@ -155,11 +162,27 @@ def handle_cart(update: Update, context: CallbackContext, access_token):
         context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
         return 'HANDLE_MENU'
 
+    elif cart_item_id == 'pay':
+        context.bot.send_message(chat_id=chat_id, text='Please provide your email address:')
+        context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+        return 'WAITING_EMAIL'
+
     remove_product_from_cart(access_token, chat_id, cart_item_id)
     text_message, reply_markup = show_cart(update, context, access_token, chat_id)
     query.message.edit_text(text_message, reply_markup=reply_markup)
 
     return 'HANDLE_CART'
+
+
+def handle_email(update: Update, context: CallbackContext, access_token):
+    chat_id = update.message.chat_id
+    email = update.message.text
+    context.bot.send_message(chat_id=chat_id, text=f'You provided the email address: {email}. Thank you!')
+
+    reply_markup = fetch_products(access_token)
+    context.bot.send_message(chat_id=chat_id, text='Choose an available fish:', reply_markup=reply_markup)
+
+    return 'HANDLE_MENU'
 
 
 def handle_users_reply(update: Update, context: CallbackContext):
@@ -185,14 +208,15 @@ def handle_users_reply(update: Update, context: CallbackContext):
         'START': start,
         'HANDLE_MENU': handle_menu,
         'HANDLE_DESCRIPTION': handle_description,
-        'HANDLE_CART': handle_cart
+        'HANDLE_CART': handle_cart,
+        'WAITING_EMAIL': handle_email
     }
     state_handler = states_functions[user_state]
     try:
         next_state = state_handler(update, context, access_token)
         db.set(chat_id, next_state)
     except Exception as err:
-        logger.error(f"Error while processing update: {err}", exc_info=True)
+        logger.error(f'Error while processing update: {err}', exc_info=True)
 
 
 def get_database_connection():
