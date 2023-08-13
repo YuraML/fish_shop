@@ -2,6 +2,7 @@ import logging
 import os
 import redis
 
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Filters, Updater, CallbackQueryHandler, CommandHandler, MessageHandler, CallbackContext
@@ -10,16 +11,13 @@ from services import get_access_token, get_products, get_product, get_product_im
     get_cart_products, get_cart, remove_product_from_cart, add_client_email
 
 _database = None
-
-logging.basicConfig(
-    format='%(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+current_token = None
+token_expires_in = None
 
 logger = logging.getLogger(__name__)
 
 
-def fetch_products(access_token):
+def get_products_keyboard(access_token):
     products = get_products(access_token)['data']
     keyboard = [[]]
     for product in products:
@@ -73,7 +71,7 @@ def show_cart(update: Update, context: CallbackContext, access_token, chat_id):
 
 
 def start(update: Update, context: CallbackContext, access_token):
-    reply_markup = fetch_products(access_token)
+    reply_markup = get_products_keyboard(access_token)
     update.message.reply_text('Choose an available fish:', reply_markup=reply_markup)
     return 'HANDLE_MENU'
 
@@ -114,7 +112,7 @@ def handle_menu(update: Update, context: CallbackContext, access_token):
 def handle_description(update: Update, context: CallbackContext, access_token):
     query = update.callback_query
     if query.data == 'back':
-        reply_markup = fetch_products(access_token)
+        reply_markup = get_products_keyboard(access_token)
         context.bot.send_message(
             chat_id=query.message.chat_id,
             text="Choose an available fish:",
@@ -157,7 +155,7 @@ def handle_cart(update: Update, context: CallbackContext, access_token):
     cart_item_id = query.data
 
     if cart_item_id == 'back_to_menu':
-        reply_markup = fetch_products(access_token)
+        reply_markup = get_products_keyboard(access_token)
         context.bot.send_message(chat_id=chat_id, text='Choose an available fish:', reply_markup=reply_markup)
         context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
         return 'HANDLE_MENU'
@@ -180,16 +178,21 @@ def handle_email(update: Update, context: CallbackContext, access_token):
     add_client_email(access_token, chat_id, email)
     context.bot.send_message(chat_id=chat_id, text=f'You provided the email address: {email}. Thank you!')
 
-    reply_markup = fetch_products(access_token)
+    reply_markup = get_products_keyboard(access_token)
     context.bot.send_message(chat_id=chat_id, text='Choose an available fish:', reply_markup=reply_markup)
 
     return 'HANDLE_MENU'
 
 
 def handle_users_reply(update: Update, context: CallbackContext):
+    global current_token, token_expires_in
+
     client_id = os.getenv('EP_CLIENT_ID')
     client_secret = os.getenv('EP_CLIENT_SECRET')
-    access_token = get_access_token(client_id, client_secret)
+    if current_token is None or datetime.now() > token_expires_in:
+        current_token, expires_in = get_access_token(client_id, client_secret)
+        token_expires_in = datetime.now() + timedelta(seconds=expires_in - 10)
+
     db = get_database_connection()
 
     if update.message:
@@ -214,7 +217,7 @@ def handle_users_reply(update: Update, context: CallbackContext):
     }
     state_handler = states_functions[user_state]
     try:
-        next_state = state_handler(update, context, access_token)
+        next_state = state_handler(update, context, current_token)
         db.set(chat_id, next_state)
     except Exception as err:
         logger.error(f'Error while processing update: {err}', exc_info=True)
@@ -232,6 +235,10 @@ def get_database_connection():
 
 if __name__ == '__main__':
     load_dotenv()
+    logging.basicConfig(
+        format='%(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO
+    )
     tg_token = os.getenv('TELEGRAM_TOKEN')
     updater = Updater(tg_token)
 

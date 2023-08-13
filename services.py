@@ -1,9 +1,5 @@
 import requests
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 
 def get_access_token(client_id, client_secret):
     url = 'https://useast.api.elasticpath.com/oauth/access_token'
@@ -16,10 +12,11 @@ def get_access_token(client_id, client_secret):
     response = requests.post(url, data=client_data)
     response.raise_for_status()
 
-    response_context = response.json()
-    access_token = response_context['access_token']
+    response = response.json()
+    access_token = response['access_token']
+    expires_in = response.get('expires_in', 0)
 
-    return access_token
+    return access_token, expires_in
 
 
 def get_products(access_token):
