@@ -12,9 +12,9 @@ def get_access_token(client_id, client_secret):
     response = requests.post(url, data=client_data)
     response.raise_for_status()
 
-    response_json = response.json()
-    access_token = response_json['access_token']
-    expires_in = response_json.get('expires_in', 0)
+    token_content = response.json()
+    access_token = token_content['access_token']
+    expires_in = token_content.get('expires_in', 0)
 
     return access_token, expires_in
 
